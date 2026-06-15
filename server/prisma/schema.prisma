@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ChallengeStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskType {
+  MANDATORY
+  OPTIONAL
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Category {
+  LEARNING
+  FITNESS
+  HEALTH
+  CAREER
+  PERSONAL
+  FINANCE
+  CUSTOM
+}
+
+model User {
+  id                  String    @id @default(uuid())
+  clerkId             String    @unique @map("clerk_id")
+  email               String    @unique
+  name                String?
+  productivityScore   Int       @default(0) @map("productivity_score")
+  globalStreak        Int       @default(0) @map("global_streak")
+  longestGlobalStreak Int       @default(0) @map("longest_global_streak")
+  timezone            String    @default("UTC")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  challenges         Challenge[]
+  dailyTaskInstances DailyTaskInstance[]
+
+  @@map("users")
+}
+
+model Challenge {
+  id              String          @id @default(uuid())
+  userId          String          @map("user_id")
+  name            String
+  description     String?
+  startDate       DateTime        @map("start_date")
+  endDate         DateTime        @map("end_date")
+  status          ChallengeStatus @default(ACTIVE)
+  graceDaysTotal  Int             @default(1) @map("grace_days_total")
+  graceDaysUsed   Int             @default(0) @map("grace_days_used")
+  currentStreak   Int             @default(0) @map("current_streak")
+  longestStreak   Int             @default(0) @map("longest_streak")
+  reportGenerated Boolean         @default(false) @map("report_generated")
+  createdAt       DateTime        @default(now()) @map("created_at")
+
+  user               User                @relation(fields: [userId], references: [id])
+  taskBlueprints     TaskBlueprint[]
+  dailyTaskInstances DailyTaskInstance[]
+  dailyStats         DailyStats[]
+  report             ChallengeReport?
+
+  @@map("challenges")
+}
+
+model TaskBlueprint {
+  id             String     @id @default(uuid())
+  challengeId    String     @map("challenge_id")
+  title          String
+  description    String?
+  taskType       TaskType   @map("task_type")
+  difficulty     Difficulty @default(EASY)
+  category       Category   @default(PERSONAL)
+  activeFromDate DateTime   @map("active_from_date")
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  challenge      Challenge           @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  dailyInstances DailyTaskInstance[]
+
+  @@map("task_blueprints")
+}
+
+model DailyTaskInstance {
+  id              String        @id @default(uuid())
+  userId          String        @map("user_id")
+  challengeId     String        @map("challenge_id")
+  taskBlueprintId String        @map("task_blueprint_id")
+  date            DateTime      @db.Date
+  completed       Boolean       @default(false)
+  completedAt     DateTime?     @map("completed_at")
+  pointsEarned    Int           @default(0) @map("points_earned")
+
+  user          User          @relation(fields: [userId], references: [id])
+  challenge     Challenge     @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  taskBlueprint TaskBlueprint @relation(fields: [taskBlueprintId], references: [id], onDelete: Cascade)
+
+  @@unique([taskBlueprintId, date])
+  @@index([userId, date])
+  @@index([challengeId, date])
+  @@map("daily_task_instances")
+}
+
+model DailyStats {
+  id                String    @id @default(uuid())
+  challengeId       String    @map("challenge_id")
+  date              DateTime  @db.Date
+  completionRate    Float     @default(0) @map("completion_rate")
+  score             Int       @default(0)
+  streakContributed Boolean   @default(false) @map("streak_contributed")
+  graceDayUsed      Boolean   @default(false) @map("grace_day_used")
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@unique([challengeId, date])
+  @@map("daily_stats")
+}
+
+model ChallengeReport {
+  id                String   @id @default(uuid())
+  challengeId       String   @unique @map("challenge_id")
+  completionRate    Float    @map("completion_rate")
+  finalScore        Int      @map("final_score")
+  longestStreak     Int      @map("longest_streak")
+  totalTasks        Int      @map("total_tasks")
+  completedTasks    Int      @map("completed_tasks")
+  categoryBreakdown Json     @map("category_breakdown")
+  bestDay           Json?    @map("best_day")
+  worstDay          Json?    @map("worst_day")
+  heatmapJson       Json     @map("heatmap_json")
+  generatedAt       DateTime @default(now()) @map("generated_at")
+
+  challenge Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("challenge_reports")
+}
