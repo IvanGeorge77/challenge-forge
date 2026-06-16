@@ -70,6 +70,19 @@ export async function getChallenges(
   userId: string,
   status?: ChallengeStatus
 ) {
+  // Auto-complete challenges that are past their end date
+  const today = startOfDay(new Date());
+  await prisma.challenge.updateMany({
+    where: {
+      userId,
+      status: 'ACTIVE',
+      endDate: { lte: today },
+    },
+    data: {
+      status: 'COMPLETED',
+    },
+  });
+
   const where: any = { userId };
   if (status) {
     where.status = status;

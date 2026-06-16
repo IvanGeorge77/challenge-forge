@@ -2,6 +2,8 @@ import prisma from '../utils/prisma';
 import { startOfDay } from 'date-fns';
 import { generateDailyInstancesForDate, getDifficultyPoints } from './challenge.service';
 import { computeDailyStats } from './stats.service';
+import { recalculateStreak, updateGlobalStreak } from './streak.service';
+import { checkAndApplyBonuses } from './scoring.service';
 
 // ============ SERVICE ============
 
@@ -108,6 +110,7 @@ export async function getTodayTasks(userId: string, challengeId?: string) {
 
 /**
  * Mark a task instance as completed.
+ * Wires all downstream services: stats → streak → global streak → bonus scoring.
  */
 export async function completeTask(instanceId: string, userId: string) {
   const instance = await prisma.dailyTaskInstance.findFirst({
@@ -146,18 +149,33 @@ export async function completeTask(instanceId: string, userId: string) {
     },
   });
 
-  // Recalculate daily stats
+  // Update user productivity score with task points
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      productivityScore: { increment: points },
+    },
+  });
+
+  // Recalculate daily stats → streak → global streak → bonuses
   await computeDailyStats(instance.challengeId, instance.date);
+  await recalculateStreak(instance.challengeId);
+  await updateGlobalStreak(userId);
+  await checkAndApplyBonuses(instance.challengeId, userId);
 
   return updated;
 }
 
 /**
  * Unmark a task instance as completed.
+ * Recalculates all downstream services.
  */
 export async function uncompleteTask(instanceId: string, userId: string) {
   const instance = await prisma.dailyTaskInstance.findFirst({
     where: { id: instanceId, userId },
+    include: {
+      taskBlueprint: true,
+    },
   });
 
   if (!instance) {
@@ -187,8 +205,19 @@ export async function uncompleteTask(instanceId: string, userId: string) {
     },
   });
 
-  // Recalculate daily stats
+  // Deduct the points from user's productivity score
+  const points = getDifficultyPoints(instance.taskBlueprint.difficulty);
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      productivityScore: { decrement: points },
+    },
+  });
+
+  // Recalculate daily stats → streak → global streak
   await computeDailyStats(instance.challengeId, instance.date);
+  await recalculateStreak(instance.challengeId);
+  await updateGlobalStreak(userId);
 
   return updated;
 }
