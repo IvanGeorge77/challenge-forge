@@ -1,70 +1,28 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { PlusCircle, Flame, TrendingUp, CheckCircle, Target } from 'lucide-react'
 import Card, { StatCard } from '../components/ui/Card'
 import Button from '../components/ui/Button'
-import Badge, { DifficultyBadge, StatusBadge } from '../components/ui/Badge'
 import ProgressBar from '../components/ui/ProgressBar'
 import Modal from '../components/ui/Modal'
+import { SkeletonCard, SkeletonStatCard } from '../components/ui/Skeleton'
+import TaskItem from '../components/task/TaskItem'
+import { useDailyTasks } from '../hooks/useDailyTasks'
+import { useApi } from '../hooks/useApi'
 import api from '../lib/api'
-import type { DailyTaskGroup, OverviewStats, MissedDay } from '../types'
+import { useEffect } from 'react'
 
 export default function Dashboard() {
-  const [dailyData, setDailyData] = useState<{ tasks: DailyTaskGroup[]; missedDays: MissedDay[] }>({ tasks: [], missedDays: [] })
-  const [stats, setStats] = useState<OverviewStats | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [graceDayModal, setGraceDayModal] = useState<MissedDay | null>(null)
+  const { dailyData, loading: dailyLoading, toggleTask, applyGraceDay } = useDailyTasks()
+  const { data: stats, loading: statsLoading, execute: fetchStats } = useApi(api.getOverviewStats.bind(api))
+
+  const [graceDayModal, setGraceDayModal] = useState<any>(null)
 
   useEffect(() => {
-    loadData()
-  }, [])
+    fetchStats()
+  }, [fetchStats])
 
-  async function loadData() {
-    try {
-      setLoading(true)
-      const [dailyRes, statsRes] = await Promise.all([
-        api.getDailyTasks(),
-        api.getOverviewStats(),
-      ])
-      setDailyData(dailyRes)
-      setStats(statsRes)
-    } catch (err) {
-      console.error('Failed to load dashboard:', err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleToggleTask(instanceId: string, completed: boolean) {
-    try {
-      if (completed) {
-        await api.uncompleteTask(instanceId)
-      } else {
-        await api.completeTask(instanceId)
-      }
-      loadData()
-    } catch (err) {
-      console.error('Failed to toggle task:', err)
-    }
-  }
-
-  async function handleGraceDay(challengeId: string, date: string) {
-    try {
-      await api.applyGraceDay(challengeId, date)
-      setGraceDayModal(null)
-      loadData()
-    } catch (err) {
-      console.error('Failed to apply grace day:', err)
-    }
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin h-8 w-8 border-2 border-accent border-t-transparent rounded-full" />
-      </div>
-    )
-  }
+  const loading = dailyLoading || statsLoading
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -82,31 +40,40 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Overview */}
-      {stats && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            label="Today's Completion"
-            value={`${stats.todayCompletion}%`}
-            icon={<Target size={20} />}
-          />
-          <StatCard
-            label="Global Streak"
-            value={stats.globalStreak}
-            sublabel="days"
-            icon={<Flame size={20} />}
-          />
-          <StatCard
-            label="Tasks Completed"
-            value={stats.totalTasksCompleted}
-            icon={<CheckCircle size={20} />}
-          />
-          <StatCard
-            label="Productivity Score"
-            value={stats.productivityScore}
-            icon={<TrendingUp size={20} />}
-          />
-        </div>
-      )}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {loading && !stats ? (
+          <>
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+            <SkeletonStatCard />
+          </>
+        ) : stats ? (
+          <>
+            <StatCard
+              label="Today's Completion"
+              value={`${stats.todayCompletion}%`}
+              icon={<Target size={20} />}
+            />
+            <StatCard
+              label="Global Streak"
+              value={stats.globalStreak}
+              sublabel="days"
+              icon={<Flame size={20} />}
+            />
+            <StatCard
+              label="Tasks Completed"
+              value={stats.totalTasksCompleted}
+              icon={<CheckCircle size={20} />}
+            />
+            <StatCard
+              label="Productivity Score"
+              value={stats.productivityScore}
+              icon={<TrendingUp size={20} />}
+            />
+          </>
+        ) : null}
+      </div>
 
       {/* Missed Day Alerts */}
       {dailyData.missedDays?.length > 0 && (
@@ -126,7 +93,6 @@ export default function Dashboard() {
                       Use Grace Day
                     </Button>
                   )}
-                  <Button size="sm" variant="ghost">Break Streak</Button>
                 </div>
               </div>
             </div>
@@ -135,7 +101,12 @@ export default function Dashboard() {
       )}
 
       {/* Today's Tasks by Challenge */}
-      {dailyData.tasks?.length > 0 ? (
+      {loading && !dailyData.tasks.length ? (
+        <div className="space-y-6">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+      ) : dailyData.tasks?.length > 0 ? (
         <div className="space-y-6">
           <h2 className="text-lg font-semibold">Today's Tasks</h2>
           {dailyData.tasks.map((group) => (
@@ -164,30 +135,15 @@ export default function Dashboard() {
               {/* Task list */}
               <div className="divide-y divide-border/50">
                 {group.tasks.map((task) => (
-                  <div
+                  <TaskItem
                     key={task.id}
-                    className={`flex items-center gap-4 px-5 py-3 hover:bg-bg-elevated/50 transition-colors ${
-                      task.completed ? 'opacity-60' : ''
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      className="task-checkbox"
-                      checked={task.completed}
-                      onChange={() => handleToggleTask(task.id, task.completed)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <span className={`text-sm ${task.completed ? 'line-through text-text-muted' : ''}`}>
-                        {task.taskBlueprint.title}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <DifficultyBadge difficulty={task.taskBlueprint.difficulty} />
-                      {task.taskBlueprint.taskType === 'OPTIONAL' && (
-                        <Badge variant="default">Optional</Badge>
-                      )}
-                    </div>
-                  </div>
+                    id={task.id}
+                    title={task.taskBlueprint.title}
+                    completed={task.completed}
+                    difficulty={task.taskBlueprint.difficulty}
+                    taskType={task.taskBlueprint.taskType}
+                    onToggle={toggleTask}
+                  />
                 ))}
               </div>
             </Card>
@@ -223,7 +179,10 @@ export default function Dashboard() {
             </p>
             <div className="flex gap-3 justify-end">
               <Button variant="ghost" onClick={() => setGraceDayModal(null)}>Cancel</Button>
-              <Button onClick={() => handleGraceDay(graceDayModal.challengeId, graceDayModal.date)}>
+              <Button onClick={() => {
+                applyGraceDay(graceDayModal.challengeId, graceDayModal.date)
+                setGraceDayModal(null)
+              }}>
                 Use Grace Day
               </Button>
             </div>
