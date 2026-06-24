@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { BarChart3, TrendingUp, Target, Layers } from 'lucide-react'
 import Card, { StatCard } from '../components/ui/Card'
+import CategoryChart from '../components/analytics/CategoryChart'
+import DifficultyChart from '../components/analytics/DifficultyChart'
 import api from '../lib/api'
 import type { OverviewStats, CategoryBreakdown, DifficultyBreakdown } from '../types'
 
@@ -9,6 +11,7 @@ export default function Analytics() {
   const [categories, setCategories] = useState<CategoryBreakdown[]>([])
   const [difficulties, setDifficulties] = useState<DifficultyBreakdown[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadData()
@@ -17,6 +20,7 @@ export default function Analytics() {
   async function loadData() {
     try {
       setLoading(true)
+      setError(null)
       const [s, c, d] = await Promise.all([
         api.getOverviewStats(),
         api.getCategoryBreakdown(),
@@ -25,7 +29,8 @@ export default function Analytics() {
       setStats(s)
       setCategories(c)
       setDifficulties(d)
-    } catch (err) {
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load analytics')
       console.error('Failed to load analytics:', err)
     } finally {
       setLoading(false)
@@ -44,6 +49,23 @@ export default function Analytics() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin h-8 w-8 border-2 border-accent border-t-transparent rounded-full" />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="space-y-8 animate-fade-in">
+        <div>
+          <h1 className="text-2xl font-bold">Analytics</h1>
+          <p className="text-text-muted text-sm mt-1">Insights into your productivity performance</p>
+        </div>
+        <Card hover={false} className="text-center py-16">
+          <p className="text-text-muted mb-4">{error}</p>
+          <button onClick={loadData} className="text-accent hover:underline text-sm font-medium">
+            Retry
+          </button>
+        </Card>
       </div>
     )
   }
@@ -81,6 +103,19 @@ export default function Analytics() {
         </div>
       )}
 
+      {/* Recharts Visualizations */}
+      <div className="grid lg:grid-cols-2 gap-6">
+        <Card hover={false}>
+          <h3 className="text-sm font-semibold mb-3">Category Radar</h3>
+          <CategoryChart data={categories} />
+        </Card>
+        <Card hover={false}>
+          <h3 className="text-sm font-semibold mb-3">Difficulty Distribution</h3>
+          <DifficultyChart data={difficulties} />
+        </Card>
+      </div>
+
+      {/* Detailed Breakdowns */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Category Performance */}
         <Card hover={false}>

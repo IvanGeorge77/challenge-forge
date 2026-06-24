@@ -1,14 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// Prevent multiple PrismaClient instances during HMR in development
+const globalForPrisma = globalThis as unknown as {
+  prisma: PrismaClient | undefined;
+};
 
-let prismaInstance: PrismaClient | null = null;
+const prisma = globalForPrisma.prisma ?? new PrismaClient();
 
-export function getPrisma(): PrismaClient {
-  if (!prismaInstance) {
-    prismaInstance = new PrismaClient();
-  }
-  return prismaInstance;
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma;
 }
 
 export default prisma;

@@ -2,6 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 
+/**
+ * Express 5 error handler.
+ * Must have exactly 4 parameters for Express to recognize it as an error handler.
+ */
 export function errorHandler(
   err: Error,
   _req: Request,
@@ -37,8 +41,10 @@ export function errorHandler(
     }
   }
 
-  // Generic error
-  res.status(500).json({
+  // Handle errors with a statusCode property (custom app errors)
+  const statusCode = (err as any).statusCode || 500;
+
+  res.status(statusCode).json({
     error: process.env.NODE_ENV === 'production'
       ? 'Internal server error'
       : err.message,

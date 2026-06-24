@@ -162,7 +162,7 @@ function Navbar() {
 
         {/* Nav Links */}
         <nav className="hidden md:flex items-center gap-8">
-          {['Features', 'How It Works', 'Why It Works', 'Pricing', 'About'].map((item) => (
+          {['Features', 'How It Works', 'Why It Works'].map((item) => (
             <a
               key={item}
               href={`#${item.toLowerCase().replace(/ /g, '-')}`}
@@ -175,10 +175,10 @@ function Navbar() {
 
         {/* Auth buttons */}
         <div className="flex items-center gap-3">
-          <Link to="/dashboard" className="text-sm text-text-muted hover:text-text-primary transition-colors">
+          <Link to="/sign-in" className="text-sm text-text-muted hover:text-text-primary transition-colors">
             Log in
           </Link>
-          <Link to="/dashboard">
+          <Link to="/sign-up">
             <Button variant="outline" size="sm">Get Started</Button>
           </Link>
         </div>

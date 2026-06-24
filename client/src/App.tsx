@@ -4,6 +4,7 @@ import Landing from './pages/Landing'
 import Dashboard from './pages/Dashboard'
 import ChallengeCreate from './pages/ChallengeCreate'
 import ChallengeDetail from './pages/ChallengeDetail'
+import ChallengeReport from './pages/ChallengeReport'
 import Analytics from './pages/Analytics'
 import Profile from './pages/Profile'
 import Archive from './pages/Archive'
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/challenges/new" element={<ChallengeCreate />} />
         <Route path="/challenges/:id" element={<ChallengeDetail />} />
+        <Route path="/challenges/:id/report" element={<ChallengeReport />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/archive" element={<Archive />} />

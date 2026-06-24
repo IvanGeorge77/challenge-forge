@@ -1,3 +1,17 @@
+import type {
+  Challenge,
+  DailyTaskGroup,
+  OverviewStats,
+  HeatmapEntry,
+  CategoryBreakdown,
+  DifficultyBreakdown,
+  PredictionResult,
+  ChallengeReport,
+  User,
+  CreateChallengeForm,
+  CreateTaskForm
+} from '../types';
+
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 interface RequestOptions {
@@ -55,19 +69,19 @@ class ApiClient {
   // ========== CHALLENGES ==========
   async getChallenges(status?: string) {
     const query = status ? `?status=${status}` : '';
-    return this.request<any[]>(`/challenges${query}`);
+    return this.request<Challenge[]>(`/challenges${query}`);
   }
 
   async getChallenge(id: string) {
-    return this.request<any>(`/challenges/${id}`);
+    return this.request<Challenge>(`/challenges/${id}`);
   }
 
-  async createChallenge(data: any) {
-    return this.request<any>('/challenges', { method: 'POST', body: data });
+  async createChallenge(data: CreateChallengeForm) {
+    return this.request<Challenge>('/challenges', { method: 'POST', body: data });
   }
 
-  async updateChallenge(id: string, data: any) {
-    return this.request<any>(`/challenges/${id}`, { method: 'PUT', body: data });
+  async updateChallenge(id: string, data: Partial<CreateChallengeForm>) {
+    return this.request<Challenge>(`/challenges/${id}`, { method: 'PUT', body: data });
   }
 
   async deleteChallenge(id: string) {
@@ -79,14 +93,14 @@ class ApiClient {
     return this.request<any[]>(`/challenges/${challengeId}/tasks`);
   }
 
-  async createTask(challengeId: string, data: any) {
+  async createTask(challengeId: string, data: CreateTaskForm) {
     return this.request<any>(`/challenges/${challengeId}/tasks`, {
       method: 'POST',
       body: data,
     });
   }
 
-  async updateTask(taskId: string, data: any) {
+  async updateTask(taskId: string, data: Partial<CreateTaskForm>) {
     return this.request<any>(`/challenges/tasks/${taskId}`, {
       method: 'PUT',
       body: data,
@@ -100,57 +114,57 @@ class ApiClient {
   // ========== DAILY ==========
   async getDailyTasks(challengeId?: string) {
     const path = challengeId ? `/daily/${challengeId}` : '/daily';
-    return this.request<any>(path);
+    return this.request<{ tasks: DailyTaskGroup[], missedDays: any[] }>(path);
   }
 
   async completeTask(instanceId: string) {
-    return this.request<any>(`/daily/${instanceId}/complete`, { method: 'PUT' });
+    return this.request<void>(`/daily/${instanceId}/complete`, { method: 'PUT' });
   }
 
   async uncompleteTask(instanceId: string) {
-    return this.request<any>(`/daily/${instanceId}/uncomplete`, { method: 'PUT' });
+    return this.request<void>(`/daily/${instanceId}/uncomplete`, { method: 'PUT' });
   }
 
   // ========== STATS ==========
   async getOverviewStats() {
-    return this.request<any>('/stats/overview');
+    return this.request<OverviewStats>('/stats/overview');
   }
 
   async getHeatmapData(challengeId: string) {
-    return this.request<any[]>(`/stats/challenge/${challengeId}/heatmap`);
+    return this.request<HeatmapEntry[]>(`/stats/challenge/${challengeId}/heatmap`);
   }
 
   async getCategoryBreakdown() {
-    return this.request<any[]>('/stats/categories');
+    return this.request<CategoryBreakdown[]>('/stats/categories');
   }
 
   async getDifficultyBreakdown() {
-    return this.request<any[]>('/stats/difficulties');
+    return this.request<DifficultyBreakdown[]>('/stats/difficulties');
   }
 
   async applyGraceDay(challengeId: string, date: string) {
-    return this.request<any>(`/stats/challenge/${challengeId}/grace-day`, {
+    return this.request<void>(`/stats/challenge/${challengeId}/grace-day`, {
       method: 'POST',
       body: { date },
     });
   }
 
   async getPrediction(challengeId: string) {
-    return this.request<any>(`/stats/challenge/${challengeId}/prediction`);
+    return this.request<PredictionResult>(`/stats/challenge/${challengeId}/prediction`);
   }
 
   // ========== REPORTS ==========
   async getReport(challengeId: string) {
-    return this.request<any>(`/challenges/${challengeId}/report`);
+    return this.request<ChallengeReport>(`/challenges/${challengeId}/report`);
   }
 
   // ========== USER ==========
   async getProfile() {
-    return this.request<any>('/user/profile');
+    return this.request<User>('/user/profile');
   }
 
   async updateProfile(data: { name?: string; timezone?: string }) {
-    return this.request<any>('/user/profile', { method: 'PUT', body: data });
+    return this.request<User>('/user/profile', { method: 'PUT', body: data });
   }
 }
 

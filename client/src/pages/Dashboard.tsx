@@ -101,7 +101,7 @@ export default function Dashboard() {
       )}
 
       {/* Today's Tasks by Challenge */}
-      {loading && !dailyData.tasks.length ? (
+      {loading && (!dailyData.tasks || !dailyData.tasks.length) ? (
         <div className="space-y-6">
           <SkeletonCard />
           <SkeletonCard />

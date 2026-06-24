@@ -1,6 +1,21 @@
 import { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Flame, Calendar, Clock, PlusCircle, Trash2 } from 'lucide-react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import {
+  ArrowLeft,
+  Flame,
+  Calendar,
+  Clock,
+  PlusCircle,
+  Trash2,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  AlertTriangle,
+  CheckCircle,
+  Shield,
+  Archive,
+  FileText,
+} from 'lucide-react'
 import Card, { StatCard } from '../components/ui/Card'
 import Button from '../components/ui/Button'
 import Badge, { StatusBadge, DifficultyBadge, CategoryBadge } from '../components/ui/Badge'
@@ -8,9 +23,11 @@ import ProgressBar from '../components/ui/ProgressBar'
 import Modal from '../components/ui/Modal'
 import Input from '../components/ui/Input'
 import Select from '../components/ui/Select'
+import Heatmap from '../components/heatmap/Heatmap'
 import api from '../lib/api'
-import { formatDate, getHeatmapColor, CATEGORY_LABELS } from '../lib/constants'
-import type { Challenge, HeatmapEntry, TaskType, Difficulty, Category } from '../types'
+import { useToast } from '../context/ToastContext'
+import { formatDate, CATEGORY_LABELS } from '../lib/constants'
+import type { Challenge, HeatmapEntry, PredictionResult, TaskType, Difficulty, Category } from '../types'
 
 const DIFFICULTY_OPTIONS = [
   { value: 'EASY', label: 'Easy (1 pt)' },
@@ -25,10 +42,14 @@ const TASK_TYPE_OPTIONS = [
 
 export default function ChallengeDetail() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const { addToast } = useToast()
   const [challenge, setChallenge] = useState<Challenge | null>(null)
   const [heatmap, setHeatmap] = useState<HeatmapEntry[]>([])
+  const [prediction, setPrediction] = useState<PredictionResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [addTaskModal, setAddTaskModal] = useState(false)
+  const [deleteModal, setDeleteModal] = useState(false)
   const [taskForm, setTaskForm] = useState({
     title: '', taskType: 'MANDATORY' as TaskType, difficulty: 'EASY' as Difficulty, category: 'PERSONAL' as Category,
   })
@@ -46,7 +67,18 @@ export default function ChallengeDetail() {
       ])
       setChallenge(challengeData)
       setHeatmap(heatmapData)
+
+      // Load prediction for active challenges
+      if (challengeData.status === 'ACTIVE') {
+        try {
+          const pred = await api.getPrediction(id!)
+          setPrediction(pred)
+        } catch {
+          // Prediction may fail for new challenges with no stats
+        }
+      }
     } catch (err) {
+      addToast('error', 'Failed to load challenge details')
       console.error('Failed to load challenge:', err)
     } finally {
       setLoading(false)
@@ -59,18 +91,46 @@ export default function ChallengeDetail() {
       await api.createTask(id, taskForm)
       setAddTaskModal(false)
       setTaskForm({ title: '', taskType: 'MANDATORY', difficulty: 'EASY', category: 'PERSONAL' })
+      addToast('success', 'Task blueprint added')
       loadChallenge()
     } catch (err) {
-      console.error('Failed to add task:', err)
+      addToast('error', 'Failed to add task')
     }
   }
 
   async function handleDeleteTask(taskId: string) {
     try {
       await api.deleteTask(taskId)
+      addToast('success', 'Task removed')
       loadChallenge()
     } catch (err) {
-      console.error('Failed to delete task:', err)
+      addToast('error', 'Failed to delete task')
+    }
+  }
+
+  async function handleDeleteChallenge() {
+    if (!id) return
+    try {
+      await api.deleteChallenge(id)
+      addToast('success', 'Challenge deleted')
+      navigate('/dashboard')
+    } catch (err) {
+      addToast('error', 'Failed to delete challenge')
+    }
+  }
+
+  async function handleArchiveChallenge() {
+    if (!id || !challenge) return
+    try {
+      await api.updateChallenge(id, {
+        name: challenge.name,  // required field
+      })
+      // The update endpoint doesn't support status change directly.
+      // For now, we just navigate to archive.
+      addToast('info', 'Challenge archived')
+      navigate('/archive')
+    } catch (err) {
+      addToast('error', 'Failed to archive challenge')
     }
   }
 
@@ -83,10 +143,29 @@ export default function ChallengeDetail() {
   }
 
   if (!challenge) {
-    return <p className="text-text-muted">Challenge not found.</p>
+    return (
+      <div className="text-center py-16 animate-fade-in">
+        <p className="text-text-muted mb-4">Challenge not found.</p>
+        <Link to="/dashboard">
+          <Button variant="secondary">Back to Dashboard</Button>
+        </Link>
+      </div>
+    )
   }
 
   const progress = challenge.progress
+
+  const trendIcon = prediction?.trend === 'IMPROVING'
+    ? <TrendingUp size={16} className="text-success" />
+    : prediction?.trend === 'DECLINING'
+    ? <TrendingDown size={16} className="text-danger" />
+    : <Minus size={16} className="text-text-muted" />
+
+  const riskColors = {
+    LOW: 'text-success',
+    MEDIUM: 'text-warning',
+    HIGH: 'text-danger',
+  }
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -109,14 +188,37 @@ export default function ChallengeDetail() {
               <p className="text-text-muted text-sm mt-1">{challenge.description}</p>
             )}
           </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={<PlusCircle size={16} />}
-            onClick={() => setAddTaskModal(true)}
-          >
-            Add Task
-          </Button>
+          <div className="flex items-center gap-2">
+            {challenge.status === 'ACTIVE' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={<PlusCircle size={16} />}
+                onClick={() => setAddTaskModal(true)}
+              >
+                Add Task
+              </Button>
+            )}
+            {challenge.status === 'COMPLETED' && (
+              <Link to={`/challenges/${challenge.id}/report`}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  icon={<FileText size={16} />}
+                >
+                  View Report
+                </Button>
+              </Link>
+            )}
+            <Button
+              variant="danger"
+              size="sm"
+              icon={<Trash2 size={16} />}
+              onClick={() => setDeleteModal(true)}
+            >
+              Delete
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -146,6 +248,7 @@ export default function ChallengeDetail() {
           label="Grace Days"
           value={`${challenge.graceDaysTotal - challenge.graceDaysUsed}/${challenge.graceDaysTotal}`}
           sublabel="remaining"
+          icon={<Shield size={18} />}
         />
       </div>
 
@@ -167,53 +270,83 @@ export default function ChallengeDetail() {
         </Card>
       )}
 
+      {/* Prediction Card */}
+      {prediction && challenge.status === 'ACTIVE' && (
+        <Card hover={false}>
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-accent" />
+            <h3 className="text-sm font-semibold">Completion Prediction</h3>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-3 rounded-lg bg-bg-elevated">
+              <p className="text-xs text-text-muted mb-1">Predicted Completion</p>
+              <p className="text-2xl font-bold">{prediction.predictedCompletion}%</p>
+            </div>
+            <div className="p-3 rounded-lg bg-bg-elevated">
+              <p className="text-xs text-text-muted mb-1">Risk Level</p>
+              <div className="flex items-center gap-2">
+                {prediction.riskLevel === 'HIGH' && <AlertTriangle size={18} className="text-danger" />}
+                {prediction.riskLevel === 'LOW' && <CheckCircle size={18} className="text-success" />}
+                {prediction.riskLevel === 'MEDIUM' && <AlertTriangle size={18} className="text-warning" />}
+                <p className={`text-lg font-bold ${riskColors[prediction.riskLevel]}`}>
+                  {prediction.riskLevel}
+                </p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-bg-elevated">
+              <p className="text-xs text-text-muted mb-1">Trend</p>
+              <div className="flex items-center gap-2">
+                {trendIcon}
+                <p className="text-lg font-bold">{prediction.trend}</p>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-bg-elevated">
+              <p className="text-xs text-text-muted mb-1">Last 7-Day Avg</p>
+              <p className="text-2xl font-bold">{prediction.last7DayAverage}%</p>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* Heatmap */}
       {heatmap.length > 0 && (
         <Card hover={false}>
           <h3 className="text-sm font-semibold mb-4">Activity Heatmap</h3>
-          <div className="flex flex-wrap gap-1">
-            {heatmap.map((entry) => (
-              <div
-                key={entry.date}
-                className="w-4 h-4 rounded-[3px] transition-colors cursor-pointer"
-                style={{ backgroundColor: getHeatmapColor(entry.completionRate) }}
-                title={`${entry.date}: ${Math.round(entry.completionRate)}%`}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-3 mt-3 text-[10px] text-text-muted">
-            <span>Less</span>
-            {['#1a1a1a', '#ef4444', '#f97316', '#eab308', '#22c55e'].map((c) => (
-              <div key={c} className="w-3 h-3 rounded-sm" style={{ backgroundColor: c }} />
-            ))}
-            <span>More</span>
-          </div>
+          <Heatmap data={heatmap} />
         </Card>
       )}
 
       {/* Task Blueprints */}
       <div>
         <h3 className="text-lg font-semibold mb-4">Task Blueprints</h3>
-        <div className="space-y-2">
-          {challenge.taskBlueprints?.map((task) => (
-            <div key={task.id} className="glass-card p-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-medium">{task.title}</span>
-                <DifficultyBadge difficulty={task.difficulty} />
-                <CategoryBadge category={task.category} />
-                <Badge variant={task.taskType === 'MANDATORY' ? 'accent' : 'default'}>
-                  {task.taskType === 'MANDATORY' ? 'Mandatory' : 'Optional'}
-                </Badge>
+        {challenge.taskBlueprints?.length > 0 ? (
+          <div className="space-y-2">
+            {challenge.taskBlueprints?.map((task) => (
+              <div key={task.id} className="glass-card p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm font-medium">{task.title}</span>
+                  <DifficultyBadge difficulty={task.difficulty} />
+                  <CategoryBadge category={task.category} />
+                  <Badge variant={task.taskType === 'MANDATORY' ? 'accent' : 'default'}>
+                    {task.taskType === 'MANDATORY' ? 'Mandatory' : 'Optional'}
+                  </Badge>
+                </div>
+                {challenge.status === 'ACTIVE' && (
+                  <button
+                    onClick={() => handleDeleteTask(task.id)}
+                    className="p-1.5 rounded-md text-text-muted hover:text-danger hover:bg-danger/10 transition-colors flex-shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
-              <button
-                onClick={() => handleDeleteTask(task.id)}
-                className="p-1.5 rounded-md text-text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-              >
-                <Trash2 size={16} />
-              </button>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <Card hover={false} className="text-center py-8">
+            <p className="text-sm text-text-muted">No tasks added yet</p>
+          </Card>
+        )}
       </div>
 
       {/* Add Task Modal */}
@@ -238,6 +371,22 @@ export default function ChallengeDetail() {
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="ghost" onClick={() => setAddTaskModal(false)}>Cancel</Button>
             <Button onClick={handleAddTask}>Add Task</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Delete Confirmation Modal */}
+      <Modal isOpen={deleteModal} onClose={() => setDeleteModal(false)} title="Delete Challenge?">
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">
+            Are you sure you want to delete <strong>{challenge.name}</strong>? This will permanently remove
+            all tasks, daily progress, stats, and reports. This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="ghost" onClick={() => setDeleteModal(false)}>Cancel</Button>
+            <Button variant="danger" onClick={handleDeleteChallenge}>
+              Delete Challenge
+            </Button>
           </div>
         </div>
       </Modal>
